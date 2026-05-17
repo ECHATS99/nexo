@@ -1,0 +1,12 @@
+{
+  "name": "NEXO — Super App Mondiale",
+  "description": "Une super-application mondiale tout-en-un : Boutiques, Produits, Statuts 24h, Messagerie et Assistant IA Go.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

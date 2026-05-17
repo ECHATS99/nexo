@@ -1,0 +1,157 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- PRIMITIVES ---
+    
+    function isSignedIn() { return request.auth != null; }
+    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+    function isAdmin() { 
+      return isSignedIn() && (
+        request.auth.token.email == "eliothm071@gmail.com" || 
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      ); 
+    }
+    
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 64 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+
+    // --- VALIDATION HELPERS ---
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'plan']) 
+        && data.uid == request.auth.uid
+        && data.displayName is string && data.displayName.size() <= 50
+        && data.plan in ['basic', 'premium', 'nexo']
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 20))
+        && (!('city' in data) || (data.city is string && data.city.size() <= 50))
+        && (!('isAdmin' in data) || data.isAdmin == false || isAdmin());
+    }
+
+    function isValidShop(data) {
+      return data.keys().hasAll(['ownerId', 'name', 'slug'])
+        && data.ownerId == request.auth.uid
+        && data.name is string && data.name.size() <= 100
+        && data.slug is string && data.slug.size() <= 100
+        && (!('description' in data) || (data.description is string && data.description.size() <= 1000))
+        && (!('isVerified' in data) || data.isVerified == false || isAdmin());
+    }
+
+    function isValidProduct(data) {
+      return data.keys().hasAll(['shopId', 'ownerId', 'title', 'price'])
+        && data.ownerId == request.auth.uid
+        && data.title is string && data.title.size() <= 200
+        && data.price is number && data.price >= 0
+        && data.shopId is string
+        && (!('description' in data) || (data.description is string && data.description.size() <= 3000))
+        && (!('images' in data) || (data.images is list && data.images.size() <= 5));
+    }
+
+    // --- MATCH BLOCKS ---
+
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidUser(incoming()) && incoming().createdAt == request.time;
+      allow update: if isOwner(userId) && isValidUser(incoming()) && (
+        // Prevent users from escalating their own plan or changing their UID
+        (incoming().plan == existing().plan && incoming().uid == existing().uid)
+        || isAdmin()
+      );
+      allow delete: if isAdmin();
+
+      match /go_history/{msgId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /alerts/{alertId} {
+        allow read, write: if isOwner(userId);
+        // Allow reading alerts for checking during product creation (Demo workaround)
+        allow list: if isSignedIn();
+      }
+
+      match /wishlist/{productId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /notifications/{notifId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    match /shops/{shopId} {
+      allow read: if true;
+      allow create: if isSignedIn() && isValidShop(incoming()) && incoming().createdAt == request.time;
+      allow update: if isAdmin()
+                   || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['rating', 'reviewCount']))
+                   || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['followerCount']))
+                   || (isOwner(existing().ownerId) && 
+                       !incoming().diff(existing()).affectedKeys().contains('ownerId') && 
+                       (!incoming().diff(existing()).affectedKeys().contains('isVerified') || incoming().isVerified == existing().isVerified)
+                      );
+      allow delete: if isAdmin();
+    }
+
+    match /follows/{id} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /metadata/stats {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow create: if isSignedIn() && isValidProduct(incoming()) && incoming().createdAt == request.time;
+      allow update: if isOwner(existing().ownerId) && (
+        (!incoming().diff(existing()).affectedKeys().contains('ownerId') && !incoming().diff(existing()).affectedKeys().contains('shopId'))
+        || isAdmin()
+      ) || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['commentCount', 'likeCount']));
+      allow delete: if isOwner(existing().ownerId) || isAdmin();
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+        allow update: if isOwner(existing().userId);
+        allow delete: if isOwner(existing().userId) || isAdmin();
+      }
+    }
+
+    match /statuses/{statusId} {
+      allow read: if true; // In app logic, filter by followed shops
+      allow create: if isSignedIn() && incoming().shopId != null && incoming().createdAt == request.time;
+      allow delete: if isSignedIn() && (isAdmin() || exists(/databases/$(database)/documents/shops/$(existing().shopId)) && get(/databases/$(database)/documents/shops/$(existing().shopId)).data.ownerId == request.auth.uid);
+    }
+
+    match /conversations/{convId} {
+      allow read: if isSignedIn() && request.auth.uid in existing().participantIds;
+      allow create: if isSignedIn() && request.auth.uid in incoming().participantIds;
+      allow update: if isSignedIn() && request.auth.uid in existing().participantIds;
+
+      match /messages/{msgId} {
+        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participantIds;
+        allow create: if isSignedIn() && incoming().senderId == request.auth.uid;
+      }
+    }
+
+    match /likes/{likeId} {
+      allow read: if true;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow delete: if isOwner(existing().userId);
+    }
+
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if false; // Only manageable via Firebase Console or special script
+    }
+  }
+}

@@ -1,0 +1,107 @@
+{
+  "entities": {
+    "User": {
+      "title": "Utilisateur",
+      "description": "Profil utilisateur complet",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "city": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "plan": { "type": "string", "enum": ["basic", "premium", "nexo"] },
+        "planExpiresAt": { "type": "string", "format": "date-time" },
+        "isAdmin": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "plan"]
+    },
+    "Shop": {
+      "title": "Boutique",
+      "description": "Profil de boutique",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "name": { "type": "string" },
+        "slug": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "city": { "type": "string" },
+        "logoURL": { "type": "string" },
+        "bannerURL": { "type": "string" },
+        "isVerified": { "type": "boolean" },
+        "followerCount": { "type": "number" },
+        "likeCount": { "type": "number" },
+        "stats": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "name", "slug"]
+    },
+    "Product": {
+      "title": "Produit",
+      "description": "Article en vente",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "shopId": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "category": { "type": "string" },
+        "condition": { "type": "string" },
+        "city": { "type": "string" },
+        "isNegotiable": { "type": "boolean" },
+        "images": { "type": "array" },
+        "whatsapp": { "type": "string" },
+        "facebook": { "type": "string" },
+        "likeCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["shopId", "ownerId", "title", "price"]
+    },
+    "Status": {
+      "title": "Statut",
+      "description": "Contenu temporaire 24h",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "shopId": { "type": "string" },
+        "imageURL": { "type": "string" },
+        "text": { "type": "string" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["shopId", "imageURL", "expiresAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Message de chat",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "conversationId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "content": { "type": "string" },
+        "imageURL": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["conversationId", "senderId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users": { "schema": "#/entities/User", "description": "Profils utilisateurs" },
+    "shops": { "schema": "#/entities/Shop", "description": "Boutiques" },
+    "products": { "schema": "#/entities/Product", "description": "Produits" },
+    "statuses": { "schema": "#/entities/Status", "description": "Statuts 24h" },
+    "conversations": { "schema": "object", "description": "Discussions" },
+    "conversations/{convId}/messages": { "schema": "#/entities/Message", "description": "Messages" },
+    "likes": { "schema": "object", "description": "Likes (shop/product)" },
+    "comments": { "schema": "object", "description": "Commentaires" },
+    "notifications": { "schema": "object", "description": "Notifications" }
+  }
+}
